@@ -30,7 +30,13 @@ fn format_response(address: Ipv4Addr, response: Option<String>) {
             format!("{}\t -", address)
         }
         Some(response) => {
-            format!("{}\t{}", address, response.replace("\n", "\t"))
+            let json: serde_json::Value =
+                serde_json::from_str(&response).expect("JSON was not well-formatted");
+            format!(
+                "{}\t{} ",
+                address,
+                serde_json::to_string_pretty(&json).unwrap()
+            )
         }
     };
     println!("{}", message);

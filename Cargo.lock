@@ -961,6 +961,7 @@ dependencies = [
  "local-ip-address",
  "log",
  "reqwest",
+ "serde_json",
  "tokio",
 ]
 
