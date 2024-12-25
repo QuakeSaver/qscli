@@ -1,19 +1,14 @@
-// base_domain: str | None = "network.quakesaver.net",
-//       self._api_base_url = f"https://api.{base_domain}/api/v1"
-// response = requests.post(
-// url=f"{self._api_base_url}/user/get_token",
-// data=f"username={self._email}&password={self._password}",
-// headers={"Content-Type": "application/x-www-form-urlencoded"},
-// )
-// set auth token
-//return {"Authorization": f"{self._token.token_type} {self._token.access_token}"}
-// get sensors ids:
-// response = requests.get(
-// url=f"{self._api_base_url}/user/me/sensors",
-// headers=self._get_authorization_headers(),
-// )
+use chrono::prelude::*;
+use chrono::{Duration, NaiveDateTime, TimeDelta};
 
+use reqwest::Client;
+use sensor_api::models::Sensor;
+use serde_json::Value;
+use std::collections::HashMap;
+use std::fmt;
+use std::str::FromStr;
 const BASE_URL: &str = "https://api.network.quakesaver.net/api/v1";
+const OFFLINE_THRESHOLD: TimeDelta = Duration::hours(1);
 
 struct StateDisconnected {}
 
@@ -45,10 +40,29 @@ impl SMIQClient<StateConnected> {
     }
 }
 
-use reqwest::Client;
-use sensor_api::models::Sensor;
-use serde_json::Value;
-use std::collections::HashMap;
+struct PrettyDuration(Duration);
+
+impl fmt::Display for PrettyDuration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let total_seconds = self.0.num_seconds();
+        let seconds = total_seconds % 60;
+        let minutes = (total_seconds / 60) % 60;
+        let hours = (total_seconds / 3600) % 24;
+        let days = total_seconds / 86400;
+
+        if days > 9 {
+            write!(f, "{}d", days)
+        } else if days > 0 {
+            write!(f, "{}d {}h", days, hours)
+        } else if hours > 0 {
+            write!(f, "{}h {}m", hours, minutes)
+        } else if minutes > 0 {
+            write!(f, "{}m {}s", minutes, seconds)
+        } else {
+            write!(f, "{}s", seconds)
+        }
+    }
+}
 
 pub(crate) async fn print_sensors() -> Result<(), Box<dyn std::error::Error>> {
     let client = SMIQClient::new();
@@ -57,14 +71,21 @@ pub(crate) async fn print_sensors() -> Result<(), Box<dyn std::error::Error>> {
     // Get sensor IDs
     let sensors = get_sensors(connected_client.get_token()).await?;
     sensors.iter().for_each(present_sensor);
-    // println!("Sensors: {:?}", sensors);
     Ok(())
 }
 
 fn present_sensor(sensor: &Sensor) {
+    let last_updated = NaiveDateTime::from_str(&sensor.last_updated).unwrap();
+    let new = Local::now().naive_utc();
+    let last_seen = new - last_updated;
+    if last_seen > OFFLINE_THRESHOLD {
+        return;
+    }
     println!(
         "{}\t{}\t{}",
-        sensor.uid, sensor.software_version, sensor.last_updated
+        sensor.uid,
+        sensor.software_version,
+        PrettyDuration(last_seen)
     );
 }
 
@@ -85,7 +106,7 @@ async fn get_auth_token() -> Result<String, Box<dyn std::error::Error>> {
         .await?;
 
     if response.status().is_success() {
-        let json: serde_json::Value = response.json().await?;
+        let json: Value = response.json().await?;
         let token_type = json["token_type"].as_str().ok_or("Missing token_type")?;
         let access_token = json["access_token"]
             .as_str()
@@ -98,15 +119,15 @@ async fn get_auth_token() -> Result<String, Box<dyn std::error::Error>> {
 
 async fn get_sensors(auth_token: &str) -> Result<Vec<Sensor>, Box<dyn std::error::Error>> {
     let client = Client::new();
-
     let response = client
         .get(format!("{}/user/me/sensors_full", BASE_URL))
+        .query(&[("limit", 1000)])
         .header("Authorization", auth_token)
         .send()
         .await?;
 
     if response.status().is_success() {
-        let json: serde_json::Value = response.json().await?;
+        let json: Value = response.json().await?;
         let sensors = &json["sensors"];
         if let Value::Object(map) = sensors {
             let sensors = map
