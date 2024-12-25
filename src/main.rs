@@ -1,9 +1,12 @@
+mod api;
 mod cli;
 mod scan;
 
 use crate::scan::scan;
 use clap::Parser;
 
+use crate::api::print_sensors;
+use crate::cli::Commands;
 use std::net::Ipv4Addr;
 
 #[tokio::main]
@@ -13,9 +16,15 @@ async fn main() {
         .init();
 
     let args = cli::Cli::parse();
-    let interface = args.interface;
-    let results = scan(interface).await;
-    present_results(results);
+    match args.command {
+        Commands::Detect { interface } => {
+            let results = scan(interface).await;
+            present_results(results);
+        }
+        Commands::Sensors => {
+            print_sensors().await.expect("TODO: panic message");
+        }
+    }
 }
 
 fn present_results(scan_results: Vec<(Ipv4Addr, Option<String>)>) {
