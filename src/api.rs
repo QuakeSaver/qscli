@@ -1,12 +1,14 @@
 use chrono::prelude::*;
 use chrono::{Duration, NaiveDateTime, TimeDelta};
 
+use eyre::eyre;
 use reqwest::Client;
 use sensor_api::models::Sensor;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
+
 const BASE_URL: &str = "https://api.network.quakesaver.net/api/v1";
 const OFFLINE_THRESHOLD: TimeDelta = Duration::hours(1);
 
@@ -113,7 +115,7 @@ async fn get_auth_token() -> Result<String, Box<dyn std::error::Error>> {
             .ok_or("Missing access_token")?;
         Ok(format!("{} {}", token_type, access_token))
     } else {
-        Err(format!("Failed to get auth token: {}", response.text().await?).into())
+        Err(eyre!("Failed to get auth token: {}", response.text().await?).into())
     }
 }
 
@@ -136,10 +138,10 @@ async fn get_sensors(auth_token: &str) -> Result<Vec<Sensor>, Box<dyn std::error
                 .collect::<Vec<Sensor>>();
             Ok(sensors)
         } else {
-            Err(format!("Failed to parse sensors: {}", sensors).into())
+            Err(eyre!("Failed to parse sensors: {}", sensors).into())
         }
     } else {
-        Err(format!("Failed to get sensor IDs: {}", response.text().await?).into())
+        Err(eyre!("Failed to get sensor IDs: {}", response.text().await?).into())
     }
 }
 

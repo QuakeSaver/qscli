@@ -7,10 +7,12 @@ use clap::Parser;
 
 use crate::api::print_sensors;
 use crate::cli::Commands;
+use eyre::Result;
 use std::net::Ipv4Addr;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
+    color_eyre::install()?;
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
@@ -25,6 +27,7 @@ async fn main() {
             print_sensors().await.expect("TODO: panic message");
         }
     }
+    Ok(())
 }
 
 fn present_results(scan_results: Vec<(Ipv4Addr, Option<String>)>) {
