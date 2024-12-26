@@ -1,15 +1,14 @@
 use chrono::prelude::*;
 use chrono::{Duration, NaiveDateTime, TimeDelta};
 
-use eyre::eyre;
-use reqwest::Client;
+use sensor_api::apis::configuration::Configuration;
+use sensor_api::apis::users_api::{get_access_token_by_login, get_sensors};
 use sensor_api::models::Sensor;
-use serde_json::Value;
-use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
+use log::warn;
 
-const BASE_URL: &str = "https://api.network.quakesaver.net/api/v1";
+const BASE_URL: &str = "https://api.network.quakesaver.net";
 const OFFLINE_THRESHOLD: TimeDelta = Duration::hours(1);
 
 struct StateDisconnected {}
@@ -40,6 +39,14 @@ impl SMIQClient<StateConnected> {
     fn get_token(&self) -> &str {
         &self.state.token
     }
+
+    fn api_configuration(self) -> Configuration {
+        Configuration {
+            base_path: BASE_URL.to_string(),
+            oauth_access_token: Some(self.get_token().to_string()),
+            ..Default::default()
+        }
+    }
 }
 
 struct PrettyDuration(Duration);
@@ -69,9 +76,7 @@ impl fmt::Display for PrettyDuration {
 pub(crate) async fn print_sensors() -> Result<(), Box<dyn std::error::Error>> {
     let client = SMIQClient::new();
     let connected_client = client.authenticate().await;
-
-    // Get sensor IDs
-    let sensors = get_sensors(connected_client.get_token()).await?;
+    let sensors = get_sensors_internal(connected_client.api_configuration()).await?;
     sensors.iter().for_each(present_sensor);
     Ok(())
 }
@@ -83,8 +88,16 @@ fn present_sensor(sensor: &Sensor) {
     if last_seen > OFFLINE_THRESHOLD {
         return;
     }
+    let sensor_icon = match &*sensor.hardware_revision {
+        "OPI0_ADXL_1.0" => "▣",
+        "RPI4_HIDRA_1.0" => "🌀",
+        "RPI0_BMA_0.6" => "🌋",
+        _ => "?",
+    };
+
     println!(
-        "{}\t{}\t{}",
+        "{}\t{}\t{}\t{}",
+        sensor_icon,
         sensor.uid,
         sensor.software_version,
         PrettyDuration(last_seen)
@@ -95,69 +108,23 @@ async fn get_auth_token() -> Result<String, Box<dyn std::error::Error>> {
     dotenvy::dotenv().expect("Failed to read .env file");
     let username = std::env::var("SEISMIQ_USERNAME").expect("AUTH_TOKEN not set");
     let password = std::env::var("SEISMIQ_PASSWORD").expect("AUTH_TOKEN not set");
-    let client = Client::new();
-    let mut data = HashMap::new();
-    data.insert("username", username);
-    data.insert("password", password);
-
-    let response = client
-        .post(format!("{}/user/get_token", BASE_URL))
-        .form(&data)
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .send()
-        .await?;
-
-    if response.status().is_success() {
-        let json: Value = response.json().await?;
-        let token_type = json["token_type"].as_str().ok_or("Missing token_type")?;
-        let access_token = json["access_token"]
-            .as_str()
-            .ok_or("Missing access_token")?;
-        Ok(format!("{} {}", token_type, access_token))
-    } else {
-        Err(eyre!("Failed to get auth token: {}", response.text().await?).into())
-    }
+    let configuration = Configuration {
+        base_path: BASE_URL.to_string(),
+        ..Default::default()
+    };
+    let token =
+        get_access_token_by_login(&configuration, &username, &password, None, None, None, None)
+            .await?;
+    Ok(token.access_token)
 }
 
-async fn get_sensors(auth_token: &str) -> Result<Vec<Sensor>, Box<dyn std::error::Error>> {
-    let client = Client::new();
-    let response = client
-        .get(format!("{}/user/me/sensors_full", BASE_URL))
-        .query(&[("limit", 1000)])
-        .header("Authorization", auth_token)
-        .send()
-        .await?;
-
-    if response.status().is_success() {
-        let json: Value = response.json().await?;
-        let sensors = &json["sensors"];
-        if let Value::Object(map) = sensors {
-            let sensors = map
-                .iter()
-                .map(|(_, v)| serde_json::from_value(v.clone()).unwrap())
-                .collect::<Vec<Sensor>>();
-            Ok(sensors)
-        } else {
-            Err(eyre!("Failed to parse sensors: {}", sensors).into())
-        }
-    } else {
-        Err(eyre!("Failed to get sensor IDs: {}", response.text().await?).into())
+async fn get_sensors_internal(
+    configuration: Configuration,
+) -> Result<Vec<Sensor>, Box<dyn std::error::Error>> {
+    let response = get_sensors(&configuration, None, Some(1000), None).await?;
+    let sensors: Vec<Sensor> = response.sensors.into_values().collect();
+    if sensors.len() == 1000 {
+        warn!("hit sensor request limit");
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn it_works() {
-        let client = SMIQClient::new();
-    }
-
-    #[tokio::test]
-    async fn test_get_auth_token() {
-        let base_domain = "network.quakesaver.net";
-        let api_base_url = format!("https://api.{}/api/v1", base_domain);
-        let auth_token = get_auth_token().await.unwrap();
-        assert_eq!(auth_token, "g.balaskas");
-    }
+    Ok(sensors)
 }
