@@ -45,8 +45,8 @@ async fn probe_ip_range<'a>(ip_range: Ipv4Cidr) -> Vec<(Ipv4Addr, Option<String>
         .into_iter()
         .filter_map(|result| result.ok())
         .collect::<Vec<_>>();
-    let results = results.into_iter().map(|e| e.unwrap()).collect::<Vec<_>>();
-    results
+    
+    results.into_iter().map(|e| e.unwrap()).collect::<Vec<_>>()
 }
 
 fn to_base_address(ip_address: Ipv4Addr) -> Ipv4Addr {
@@ -56,11 +56,11 @@ fn to_base_address(ip_address: Ipv4Addr) -> Ipv4Addr {
 }
 
 fn to_ipv4_address(local_ip: IpAddr) -> Ipv4Addr {
-    let ip_address = match local_ip {
+    
+    match local_ip {
         IpAddr::V4(ip4) => ip4,
         IpAddr::V6(_) => panic!("IPv6 addresses are not supported"),
-    };
-    ip_address
+    }
 }
 
 fn get_local_ip(interface: Option<String>) -> IpAddr {
@@ -72,7 +72,7 @@ fn get_local_ip(interface: Option<String>) -> IpAddr {
                 .iter()
                 .find(|(name, _)| *name == interface)
                 .expect("failed");
-            ip.clone()
+            *ip
         }
     };
     local_ip
