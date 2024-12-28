@@ -2,6 +2,11 @@
 name = "sqcli"
 version = "0.1.0"
 edition = "2021"
+authors = ["Seismiq Developers"]
+homepage = "https://seismiq.net"
+description = "Command line tool to access seismiq sensors"
+license = "MIT"
+readme = "README.md"
 
 [dependencies]
 cidr = "0.3.0"
