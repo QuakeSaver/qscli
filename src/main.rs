@@ -6,7 +6,7 @@ use crate::scan::scan;
 use clap::Parser;
 
 use crate::api::{print_sensors, trigger_action};
-use crate::cli::{ActionOptions, Commands};
+use crate::cli::Commands;
 use eyre::Result;
 use std::net::Ipv4Addr;
 
@@ -28,11 +28,7 @@ async fn main() -> Result<()> {
         }
 
         Commands::Action { action, sensor_uid } => {
-            let action = match action {
-                ActionOptions::Reboot => "RebootTrigger",
-                ActionOptions::Blink => "LEDPagerTrigger",
-            };
-            trigger_action(&action, &sensor_uid).await?;
+            trigger_action(&action.to_string(), &sensor_uid).await?;
         }
     }
     Ok(())

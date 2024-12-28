@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use std::fmt::Display;
 /// Scan for QuakeSaver devices
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -31,4 +32,17 @@ pub enum ActionOptions {
     Reboot,
     /// blink the LED
     Blink,
+    /// Check for an update
+    CheckUpdate,
+}
+
+impl Display for ActionOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let action = match self {
+            ActionOptions::Reboot => "RebootTrigger",
+            ActionOptions::Blink => "LEDPagerTrigger",
+            ActionOptions::CheckUpdate => "MenderCheckUpdate",
+        };
+        f.write_str(action)
+    }
 }
