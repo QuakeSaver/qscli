@@ -45,7 +45,7 @@ async fn probe_ip_range<'a>(ip_range: Ipv4Cidr) -> Vec<(Ipv4Addr, Option<String>
         .into_iter()
         .filter_map(|result| result.ok())
         .collect::<Vec<_>>();
-    
+
     results.into_iter().map(|e| e.unwrap()).collect::<Vec<_>>()
 }
 
@@ -56,7 +56,6 @@ fn to_base_address(ip_address: Ipv4Addr) -> Ipv4Addr {
 }
 
 fn to_ipv4_address(local_ip: IpAddr) -> Ipv4Addr {
-    
     match local_ip {
         IpAddr::V4(ip4) => ip4,
         IpAddr::V6(_) => panic!("IPv6 addresses are not supported"),

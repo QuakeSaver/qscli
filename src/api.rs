@@ -1,12 +1,15 @@
 use chrono::prelude::*;
 use chrono::{Duration, NaiveDateTime, TimeDelta};
 
+use log::{info, warn};
 use sensor_api::apis::configuration::Configuration;
+use sensor_api::apis::sensors_api::{trigger_sensor_action, TriggerSensorActionError};
 use sensor_api::apis::users_api::{get_access_token_by_login, get_sensors};
+use sensor_api::apis::Error;
 use sensor_api::models::Sensor;
+use serde_json::Value;
 use std::fmt;
 use std::str::FromStr;
-use log::warn;
 
 const BASE_URL: &str = "https://api.network.quakesaver.net";
 const OFFLINE_THRESHOLD: TimeDelta = Duration::hours(1);
@@ -76,7 +79,17 @@ impl fmt::Display for PrettyDuration {
 pub(crate) async fn print_sensors() -> Result<(), Box<dyn std::error::Error>> {
     let client = SMIQClient::new();
     let connected_client = client.authenticate().await;
-    let sensors = get_sensors_internal(connected_client.api_configuration()).await?;
+    let response = get_sensors(
+        &connected_client.api_configuration(),
+        None,
+        Some(1000),
+        None,
+    )
+    .await?;
+    let sensors: Vec<Sensor> = response.sensors.into_values().collect();
+    if sensors.len() == 1000 {
+        warn!("hit sensor request limit");
+    }
     sensors.iter().for_each(present_sensor);
     Ok(())
 }
@@ -118,13 +131,21 @@ async fn get_auth_token() -> Result<String, Box<dyn std::error::Error>> {
     Ok(token.access_token)
 }
 
-async fn get_sensors_internal(
-    configuration: Configuration,
-) -> Result<Vec<Sensor>, Box<dyn std::error::Error>> {
-    let response = get_sensors(&configuration, None, Some(1000), None).await?;
-    let sensors: Vec<Sensor> = response.sensors.into_values().collect();
-    if sensors.len() == 1000 {
-        warn!("hit sensor request limit");
-    }
-    Ok(sensors)
+pub(crate) async fn trigger_action(
+    action_name: &str,
+    sensor_uid: &str,
+) -> Result<(), Error<TriggerSensorActionError>> {
+    let empty_body: Value = serde_json::from_str("{}")?;
+    info!("triggering action {} on sensor {}", action_name, sensor_uid);
+    let client = SMIQClient::new();
+    let connected_client = client.authenticate().await;
+    let response = trigger_sensor_action(
+        &connected_client.api_configuration(),
+        sensor_uid,
+        action_name,
+        empty_body,
+    )
+    .await?;
+    info!("{}", response["info"]);
+    Ok(())
 }

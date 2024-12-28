@@ -5,7 +5,7 @@ mod scan;
 use crate::scan::scan;
 use clap::Parser;
 
-use crate::api::print_sensors;
+use crate::api::{print_sensors, trigger_action};
 use crate::cli::Commands;
 use eyre::Result;
 use std::net::Ipv4Addr;
@@ -25,6 +25,10 @@ async fn main() -> Result<()> {
         }
         Commands::Sensors => {
             print_sensors().await.expect("TODO: panic message");
+        }
+
+        Commands::Action { action, sensor_uid } => {
+            trigger_action(&action, &sensor_uid).await?;
         }
     }
     Ok(())
