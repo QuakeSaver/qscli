@@ -1,7 +1,7 @@
 use chrono::prelude::*;
 use chrono::{Duration, NaiveDateTime, TimeDelta};
 
-use log::{info, warn};
+use log::{debug, info, warn};
 use sensor_api::apis::configuration::Configuration;
 use sensor_api::apis::sensors_api::{trigger_sensor_action, TriggerSensorActionError};
 use sensor_api::apis::users_api::{get_access_token_by_login, get_sensors};
@@ -118,9 +118,11 @@ fn present_sensor(sensor: &Sensor) {
 }
 
 async fn get_auth_token() -> Result<String, Box<dyn std::error::Error>> {
-    dotenvy::dotenv().expect("Failed to read .env file");
-    let username = std::env::var("SEISMIQ_USERNAME").expect("AUTH_TOKEN not set");
-    let password = std::env::var("SEISMIQ_PASSWORD").expect("AUTH_TOKEN not set");
+    if let Err(e) = dotenvy::dotenv() {
+        debug!("Failed to read .env file. Error: {}", e);
+    }
+    let username = std::env::var("SEISMIQ_USERNAME").expect("SEISMIQ_USERNAME not set");
+    let password = std::env::var("SEISMIQ_PASSWORD").expect("SEISMIQ_PASSWORD not set");
     let configuration = Configuration {
         base_path: BASE_URL.to_string(),
         ..Default::default()

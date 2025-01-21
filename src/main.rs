@@ -35,12 +35,12 @@ async fn main() -> Result<()> {
 }
 
 fn present_results(scan_results: Vec<(Ipv4Addr, Option<String>)>) {
-    for (address, response) in scan_results {
-        format_response(address, response);
-    }
+    let _ = scan_results
+        .into_iter()
+        .map(|x| format_response(&x.0, &x.1));
 }
 
-fn format_response(address: Ipv4Addr, response: Option<String>) {
+fn format_response(address: &Ipv4Addr, response: &Option<String>) {
     let message = match response {
         None => {
             format!("{}\t -", address)
