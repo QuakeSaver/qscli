@@ -1,3 +1,4 @@
+/// openapi-generator generate -i https://api.network.quakesaver.net/api/v1/openapi.json  -g rust -o ./sensor-api
 use chrono::prelude::*;
 use chrono::{Duration, NaiveDateTime, TimeDelta};
 
@@ -32,7 +33,7 @@ impl SMIQClient<StateDisconnected> {
     }
 
     async fn authenticate(self) -> SMIQClient<StateConnected> {
-        let _token = get_auth_token().await.unwrap();
+        let _token = get_auth_token().await.expect("Authentication failed");
         let state = StateConnected { token: _token };
         SMIQClient::<StateConnected> { state }
     }

@@ -1,3 +1,18 @@
+# Seismiq Command Line Interface
+
+Download the [latest release](https://github.com/QuakeSaver/qscli/releases) suitable for you operating system.
+
+To authenticate set two environment variables:
+
 ```shell
-openapi-generator generate -i https://api.network.quakesaver.net/api/v1/openapi.json  -g rust -o ./sensor-api
+export SEISMIQ_USERNAME="your username" 
+export SEISMIQ_PASSWORD="your password"
+```
+
+# Usage
+
+Get a list of available commands:
+
+```shell
+sqcli -h
 ```
