@@ -22,9 +22,9 @@ jobs:
       - name: Build
         run: cargo build --release
       - name: upload artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: sqcli
+          pattern: sqcli
           path: target/release/sqcli
       - name: Release
         uses: softprops/action-gh-release@v1
@@ -44,9 +44,9 @@ jobs:
       - name: Rename artifact
         run: cp target/debian/sqcli_*.deb target/debian/sqcli-${{ github.ref_name }}.deb
       - name: upload artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: sqcli-${{ github.ref_name }}.deb
+          pattern: sqcli-${{ github.ref_name }}.deb
           path: target/debian/sqcli-${{ github.ref_name }}.deb
       - name: Release
         uses: softprops/action-gh-release@v1
@@ -65,9 +65,9 @@ jobs:
         run: ls target/release/
 
       - name: upload artefact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: sqcli.exe
+          pattern: sqcli.exe
           path: target/release/sqcli.exe
 
       - name: Release
@@ -87,9 +87,9 @@ jobs:
       run: cp target/release/sqcli target/release/sqcli-osx
 
     - name: upload artefact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: sqcli-osx
+        pattern: sqcli-osx
         path: target/release/sqcli-osx
 
     - name: Release
