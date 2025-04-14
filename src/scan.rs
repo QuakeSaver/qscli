@@ -31,7 +31,7 @@ async fn probe_host(address: Ipv4Addr, port: u16) -> Option<(Ipv4Addr, Option<St
     Some((address, response_text))
 }
 
-async fn probe_ip_range<'a>(ip_range: Ipv4Cidr) -> Vec<(Ipv4Addr, Option<String>)> {
+async fn probe_ip_range(ip_range: Ipv4Cidr) -> Vec<(Ipv4Addr, Option<String>)> {
     let mut futures = Vec::new();
     for ip in ip_range {
         debug!("probing {:?}", ip);

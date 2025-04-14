@@ -5,7 +5,7 @@ use chrono::{Duration, NaiveDateTime, TimeDelta};
 use log::{debug, info, warn};
 use sensor_api::apis::configuration::Configuration;
 use sensor_api::apis::sensors_api::{trigger_sensor_action, TriggerSensorActionError};
-use sensor_api::apis::users_api::{get_access_token_by_login, get_sensors};
+use sensor_api::apis::users_api::{get_access_token_by_login, get_sensors, GetSensorsError};
 use sensor_api::apis::Error;
 use sensor_api::models::Sensor;
 use serde_json::Value;
@@ -77,7 +77,7 @@ impl fmt::Display for PrettyDuration {
     }
 }
 
-pub(crate) async fn print_sensors() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) async fn print_sensors() -> Result<(), Error<GetSensorsError>> {
     let client = SMIQClient::new();
     let connected_client = client.authenticate().await;
     let response = get_sensors(

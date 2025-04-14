@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
             present_results(results);
         }
         Commands::Sensors => {
-            print_sensors().await.expect("TODO: panic message");
+            print_sensors().await?;
         }
 
         Commands::Action { action, sensor_uid } => {
@@ -47,7 +47,7 @@ fn format_response(address: &Ipv4Addr, response: &Option<String>) {
         }
         Some(response) => {
             let json: serde_json::Value =
-                serde_json::from_str(&response).expect("JSON was not well-formatted");
+                serde_json::from_str(response).expect("JSON was not well-formatted");
             format!(
                 "{}\t{} ",
                 address,
