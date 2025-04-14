@@ -15,8 +15,8 @@ jobs:
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v3
-      - name: Clippy
-        run: cargo clippy
+      - name: Lint with clippy
+        run: cargo clippy -- --deny warnings
 
   tests:
     runs-on: ubuntu-latest
