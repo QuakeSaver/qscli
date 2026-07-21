@@ -42,6 +42,8 @@ sudo mv sqcli-osx /usr/local/bin/sqcli
 Download `sqcli.exe` and place it in a folder that is on your `PATH` (or add its
 folder to `PATH`). You can then run `sqcli` from PowerShell or Command Prompt.
 
+# Usage
+
 The `sensors` and `action` commands talk to the SeismiQ cloud API and need
 credentials. Set them via two environment variables (a local `.env` file is
 also picked up):
@@ -53,8 +55,6 @@ export SEISMIQ_PASSWORD="your password"
 
 The `detect` command talks directly to devices on your LAN and needs no
 authentication.
-
-# Usage
 
 Get a list of available commands:
 
