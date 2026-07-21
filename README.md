@@ -1,6 +1,46 @@
 # Seismiq Command Line Interface
 
-Download the [latest release](https://github.com/seismiq-net/sqcli/releases) suitable for you operating system.
+# Installation
+
+Download the artifact for your operating system from the
+[latest release](https://github.com/seismiq-net/sqcli/releases), then follow
+the steps below. Replace `<version>` (e.g. `1.1.0`) with the release you
+downloaded.
+
+## Debian / Ubuntu
+
+Install the `.deb` package. It places `sqcli` on your `PATH` automatically:
+
+```shell
+sudo apt install ./sqcli-<version>.deb
+# or: sudo dpkg -i sqcli-<version>.deb
+```
+
+## Linux (other distributions, x86_64)
+
+Download the bare `sqcli` binary, make it executable, and move it onto your
+`PATH`:
+
+```shell
+chmod +x sqcli
+sudo mv sqcli /usr/local/bin/sqcli
+```
+
+## macOS (Apple Silicon)
+
+Download `sqcli-osx`, make it executable, and move it onto your `PATH`. macOS
+quarantines files downloaded from the browser, so clear that flag as well:
+
+```shell
+chmod +x sqcli-osx
+xattr -d com.apple.quarantine sqcli-osx   # only needed for browser downloads
+sudo mv sqcli-osx /usr/local/bin/sqcli
+```
+
+## Windows
+
+Download `sqcli.exe` and place it in a folder that is on your `PATH` (or add its
+folder to `PATH`). You can then run `sqcli` from PowerShell or Command Prompt.
 
 The `sensors` and `action` commands talk to the SeismiQ cloud API and need
 credentials. Set them via two environment variables (a local `.env` file is
