@@ -6,7 +6,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 use tokio::time::timeout;
 
-pub async fn scan(interface: Option<String>) -> Vec<(Ipv4Addr, Option<String>)> {
+pub async fn scan(interface: Option<String>) -> Vec<(Ipv4Addr, String)> {
     let local_ip = get_local_ip(interface);
 
     info!("local IP address: {:?}", local_ip);
@@ -19,19 +19,19 @@ pub async fn scan(interface: Option<String>) -> Vec<(Ipv4Addr, Option<String>)> 
     results
 }
 
-async fn probe_host(address: Ipv4Addr, port: u16) -> Option<(Ipv4Addr, Option<String>)> {
-    let response = reqwest::get(format!("http://{}:{}", address, port)).await;
-    let response_text = match response {
-        Ok(response) => response.text().await.ok(),
+/// Probe a single host. Returns `Some((address, body))` only when the host
+/// actually answered on `port`; `None` means no device there.
+async fn probe_host(address: Ipv4Addr, port: u16) -> Option<(Ipv4Addr, String)> {
+    match reqwest::get(format!("http://{}:{}", address, port)).await {
+        Ok(response) => response.text().await.ok().map(|body| (address, body)),
         Err(e) => {
             debug!("error: {}", e);
             None
         }
-    };
-    Some((address, response_text))
+    }
 }
 
-async fn probe_ip_range(ip_range: Ipv4Cidr) -> Vec<(Ipv4Addr, Option<String>)> {
+async fn probe_ip_range(ip_range: Ipv4Cidr) -> Vec<(Ipv4Addr, String)> {
     let mut futures = Vec::new();
     for ip in ip_range {
         debug!("probing {:?}", ip);
@@ -41,12 +41,11 @@ async fn probe_ip_range(ip_range: Ipv4Cidr) -> Vec<(Ipv4Addr, Option<String>)> {
         ));
     }
     let results = join_all(futures).await;
-    let results = results
+    results
         .into_iter()
-        .filter_map(|result| result.ok())
-        .collect::<Vec<_>>();
-
-    results.into_iter().map(|e| e.unwrap()).collect::<Vec<_>>()
+        // Drop both timeouts (`Err`) and non-responders (`Ok(None)`).
+        .filter_map(|result| result.ok().flatten())
+        .collect()
 }
 
 fn to_base_address(ip_address: Ipv4Addr) -> Ipv4Addr {
