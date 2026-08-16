@@ -81,15 +81,57 @@ IP ADDRESS      UUID     VERSION  TYPE
 192.168.178.89  unknown   dev      HiDRA
 ```
 
-### `sensors`
+### `sensors [-f <filter>...] [-s <column>] [-r]`
 
 List the sensors registered to your SeismiQ account, fetched from the cloud
-API. Only sensors seen **within the last hour** are shown; stale/offline ones
-are omitted. Each row shows an icon for the hardware type, the sensor UID, its
-software version, and how long ago it was last seen. Requires authentication.
+API. Requires authentication. Every sensor is listed unless you filter the
+list. Each row shows an icon for the hardware revision, the sensor UID, its
+hardware family, whether it is online, its software version, how long ago it
+was last seen, and its number of warnings.
 
 ```shell
 sqcli sensors
+```
+
+```text
+    UID         TYPE     STATUS   VERSION     LAST SEEN  WARN
+▣   A3B7K9Q2    MEMS     online   1.0.0       5m 0s
+🌀  XYZ12345    HiDRA    offline  1.12.0-rc1  3d 1h
+🌋  LONGERUID1  MEMS     offline  1.0.0       1h 15m     3
+```
+
+#### Filtering
+
+Pass `--filter`/`-f` to narrow the list. Repeat the flag or comma-separate the
+values:
+
+- `online` — seen within the last hour.
+- `offline` — not seen within the last hour.
+- `mems` — MEMS sensors (ADXL or BMA accelerometer).
+- `hidra` — HiDRA sensors.
+- `unknown` — sensors with a hardware revision `sqcli` does not recognise.
+- `warnings` — sensors carrying at least one warning.
+
+Filters of the same kind widen the selection, filters of different kinds narrow
+it. So `-f mems -f hidra` lists both hardware families, while
+`-f mems,hidra -f online` lists only the online ones among them:
+
+```shell
+sqcli sensors -f online              # what the bare command used to show
+sqcli sensors -f offline -f hidra    # HiDRA units that dropped off
+sqcli sensors -f warnings            # anything reporting a problem
+```
+
+#### Sorting
+
+Pass `--sort`/`-s` to order the list by `uid` (the default), `last-seen`,
+`first-seen`, `version`, `type`, or `warnings`. Add `--reverse`/`-r` to flip
+the order. Sensors sharing a value are ordered by UID.
+
+```shell
+sqcli sensors -s last-seen           # freshest first
+sqcli sensors -s last-seen -r        # longest silent first
+sqcli sensors -f offline -s version  # stale units, grouped by firmware
 ```
 
 ### `action <action> <sensor-uid>`

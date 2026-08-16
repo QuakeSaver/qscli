@@ -1,12 +1,14 @@
 mod api;
 mod cli;
 mod scan;
+mod table;
 
 use crate::scan::scan;
 use clap::Parser;
 
 use crate::api::{print_sensors, trigger_action};
 use crate::cli::Commands;
+use crate::table::print_table;
 use eyre::Result;
 use std::net::Ipv4Addr;
 
@@ -23,8 +25,12 @@ async fn main() -> Result<()> {
             let results = scan(interface).await;
             present_results(results);
         }
-        Commands::Sensors => {
-            print_sensors().await?;
+        Commands::Sensors {
+            filter,
+            sort,
+            reverse,
+        } => {
+            print_sensors(&filter, sort, reverse).await?;
         }
 
         Commands::Action { action, sensor_uid } => {
@@ -84,37 +90,17 @@ fn device_type_from_machine(machine: Option<&str>) -> String {
 }
 
 fn print_device_table(devices: &[Device]) {
-    // One (header, cell-values) pair per column, in display order.
-    let columns: [(&str, Vec<String>); 4] = [
-        (
-            "IP ADDRESS",
-            devices.iter().map(|d| d.address.to_string()).collect(),
-        ),
-        ("UUID", devices.iter().map(|d| d.uuid.clone()).collect()),
-        ("VERSION", devices.iter().map(|d| d.version.clone()).collect()),
-        (
-            "TYPE",
-            devices.iter().map(|d| d.device_type.clone()).collect(),
-        ),
-    ];
-
-    let widths: Vec<usize> = columns
+    let rows: Vec<Vec<String>> = devices
         .iter()
-        .map(|(header, cells)| cells.iter().map(String::len).max().unwrap_or(0).max(header.len()))
+        .map(|d| {
+            vec![
+                d.address.to_string(),
+                d.uuid.clone(),
+                d.version.clone(),
+                d.device_type.clone(),
+            ]
+        })
         .collect();
 
-    let print_row = |cells: &[&str]| {
-        let row: Vec<String> = cells
-            .iter()
-            .zip(&widths)
-            .map(|(cell, w)| format!("{:<width$}", cell, width = w))
-            .collect();
-        println!("{}", row.join("  "));
-    };
-
-    print_row(&columns.iter().map(|(h, _)| *h).collect::<Vec<_>>());
-    for i in 0..devices.len() {
-        let row: Vec<&str> = columns.iter().map(|(_, cells)| cells[i].as_str()).collect();
-        print_row(&row);
-    }
+    print_table(&["IP ADDRESS", "UUID", "VERSION", "TYPE"], &rows);
 }
