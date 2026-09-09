@@ -11,7 +11,7 @@ readme = "README.md"
 [dependencies]
 cidr = "0.3.0"
 local-ip-address = "0.6.3"
-reqwest = { version = "0.12.9", features = ["json"] }
+reqwest = { version = "0.12.9", features = ["json", "stream"] }
 tokio = { version = "1.0.0", features = ["rt", "rt-multi-thread", "macros"] }
 futures = "0.3.31"
 log = "0.4.22"

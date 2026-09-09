@@ -44,9 +44,9 @@ folder to `PATH`). You can then run `sqcli` from PowerShell or Command Prompt.
 
 # Usage
 
-The `sensors` and `action` commands talk to the SeismiQ cloud API and need
-credentials. Set them via two environment variables (a local `.env` file is
-also picked up):
+The `sensors`, `waveforms` and `action` commands talk to the SeismiQ cloud API
+and need credentials. Set them via two environment variables (a local `.env`
+file is also picked up):
 
 ```shell
 export SEISMIQ_USERNAME="your username" 
@@ -133,6 +133,89 @@ sqcli sensors -s last-seen           # freshest first
 sqcli sensors -s last-seen -r        # longest silent first
 sqcli sensors -f offline -s version  # stale units, grouped by firmware
 ```
+
+### `waveforms -o <path> [-u <uid>...] [-f <filter>...] [-d <duration>]`
+
+Download seismic waveform data as miniSEED. Requires authentication. The data
+comes from the SeismiQ FDSN web service (`fdsnws.network.quakesaver.net`), which
+serves the recorded archive, so historic windows work as well as recent ones.
+
+```shell
+sqcli waveforms -u A3B7K9Q2 -d 10m -o last10min.mseed
+```
+
+#### Selecting sensors
+
+Name sensors with `--sensor`/`-u`, or let the same filters as `sqcli sensors`
+pick them. Both may be combined, in which case everything they select is
+downloaded:
+
+```shell
+sqcli waveforms -u A3B7K9Q2,XYZ12345 -d 1h -o out.mseed   # two named sensors
+sqcli waveforms -f hidra,mems -f online -d 1h -o out.mseed # whatever is online
+```
+
+At least one of the two is required, so a stray command cannot start pulling the
+whole fleet.
+
+#### Choosing the time range
+
+`--start`/`-S` and `--end`/`-E` take a timestamp (`2026-09-01`,
+`2026-09-01T12:00:00`, with an optional `Z` or `+02:00` offset), `now`, or an
+offset from now such as `-90m`. `--duration`/`-d` takes a length: `30s`, `10m`,
+`1h30m`, `2d`, `1w`, or a bare number of seconds. All times are UTC.
+
+Any two of the three fix the window; a lone `--start` runs up to now, and a lone
+`--duration` is the window ending now:
+
+```shell
+sqcli waveforms -u A3B7K9Q2 -S 2026-09-01 -E 2026-09-02 -o day.mseed
+sqcli waveforms -u A3B7K9Q2 -S 2026-09-01T06:00:00 -d 30m -o event.mseed
+sqcli waveforms -u A3B7K9Q2 -d 5m -o now.mseed
+```
+
+Long windows are fetched in day-sized requests, cut at UTC midnight; `--chunk`
+changes that length.
+
+#### Choosing the output
+
+`--output`/`-o` decides where the miniSEED goes:
+
+- a **file** — every record in one file, e.g. `-o event.mseed`.
+- a **directory** — an [SDS] archive, used when the path names an existing
+  directory or ends in a `/`, e.g. `-o archive/`.
+- `-` — standard output, for piping into another tool.
+
+An SDS archive stores one file per stream and per day:
+
+```text
+<archive>/<year>/<net>/<sta>/<chan>.D/<net>.<sta>.<loc>.<chan>.D.<year>.<doy>
+```
+
+```shell
+sqcli waveforms -f online -S 2026-09-01 -E 2026-09-08 -o archive/
+```
+
+```text
+archive/2026/QS/A3B7K9Q2/HHZ.D/QS.A3B7K9Q2..HHZ.D.2026.244
+archive/2026/QS/A3B7K9Q2/HHZ.D/QS.A3B7K9Q2..HHZ.D.2026.245
+```
+
+Records are appended, so a download extends an existing archive rather than
+replacing it — the same window fetched twice is stored twice. A single output
+file is overwritten instead.
+
+Once written, an archive can be read by any SDS-aware tool, e.g. SeisComP's
+`scart`, or ObsPy's `obspy.clients.filesystem.sds.Client`.
+
+#### Request options
+
+- `--quality` — SEED data quality: `b` (best available, the default), `d`, `r`,
+  `q` or `m`.
+- `--minimum-length` — drop segments shorter than this many seconds.
+- `--longest-only` — keep only the longest segment per stream.
+
+[SDS]: https://www.seiscomp.de/doc/base/glossary.html#term-SDS
 
 ### `action <action> <sensor-uid>`
 
