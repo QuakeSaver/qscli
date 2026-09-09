@@ -1,7 +1,11 @@
 mod api;
 mod cli;
+mod mseed;
+mod output;
 mod scan;
 mod table;
+mod timespec;
+mod waveforms;
 
 use crate::scan::scan;
 use clap::Parser;
@@ -31,6 +35,33 @@ async fn main() -> Result<()> {
             reverse,
         } => {
             print_sensors(&filter, sort, reverse).await?;
+        }
+
+        Commands::Waveforms {
+            sensors,
+            filter,
+            start,
+            end,
+            duration,
+            output,
+            quality,
+            minimum_length,
+            longest_only,
+            chunk,
+        } => {
+            waveforms::download(waveforms::Request {
+                sensors: &sensors,
+                filters: &filter,
+                start: start.as_deref(),
+                end: end.as_deref(),
+                duration: duration.as_deref(),
+                output: &output,
+                quality,
+                minimum_length,
+                longest_only,
+                chunk: chunk.as_deref(),
+            })
+            .await?;
         }
 
         Commands::Action { action, sensor_uid } => {

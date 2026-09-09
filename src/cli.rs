@@ -30,6 +30,46 @@ pub enum Commands {
         #[arg(short, long)]
         reverse: bool,
     },
+    /// Download waveform data
+    ///
+    /// Fetches miniSEED from the SeismiQ FDSN dataselect service, either into a
+    /// single file or into an SDS archive directory.
+    Waveforms {
+        /// Sensor UID to download (repeat or comma-separate)
+        #[arg(short = 'u', long = "sensor", value_delimiter = ',')]
+        sensors: Vec<String>,
+        /// Download every sensor matching these filters, as `sqcli sensors -f`
+        /// selects them (repeat or comma-separate)
+        #[arg(short, long, value_enum, value_delimiter = ',')]
+        filter: Vec<SensorFilter>,
+        /// Start of the window: a timestamp (`2026-09-01T12:00:00`), `now`, or
+        /// an offset from now (`-1h`)
+        #[arg(short = 'S', long)]
+        start: Option<String>,
+        /// End of the window, in the same spellings as --start [default: now]
+        #[arg(short = 'E', long)]
+        end: Option<String>,
+        /// Length of the window (`10m`, `1h30m`, `2d`); combine with --start or
+        /// --end, or use it alone for the window ending now
+        #[arg(short, long)]
+        duration: Option<String>,
+        /// Where to write: a file, `-` for standard output, or a directory (an
+        /// existing one, or a path ending in `/`) to fill an SDS archive
+        #[arg(short, long)]
+        output: String,
+        /// Data quality to request
+        #[arg(long, value_enum, default_value_t = Quality::B)]
+        quality: Quality,
+        /// Discard segments shorter than this many seconds
+        #[arg(long, default_value_t = 0.0)]
+        minimum_length: f64,
+        /// Return only the longest segment per stream
+        #[arg(long)]
+        longest_only: bool,
+        /// Split the download into requests of at most this length
+        #[arg(long)]
+        chunk: Option<String>,
+    },
     /// Send an action
     Action {
         #[clap(value_enum)]
@@ -110,6 +150,34 @@ impl Display for SensorSort {
             SensorSort::Warnings => "warnings",
         };
         f.write_str(key)
+    }
+}
+
+/// The SEED data quality to ask the FDSN service for.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, ValueEnum)]
+pub enum Quality {
+    /// Indeterminate quality
+    D,
+    /// Raw, as recorded
+    R,
+    /// Quality controlled
+    Q,
+    /// Modified, e.g. resampled
+    M,
+    /// Best available, whatever the archive holds
+    B,
+}
+
+impl Display for Quality {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let code = match self {
+            Quality::D => "D",
+            Quality::R => "R",
+            Quality::Q => "Q",
+            Quality::M => "M",
+            Quality::B => "B",
+        };
+        f.write_str(code)
     }
 }
 

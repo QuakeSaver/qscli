@@ -17,24 +17,24 @@ use std::str::FromStr;
 const BASE_URL: &str = "https://api.network.quakesaver.net";
 const OFFLINE_THRESHOLD: TimeDelta = Duration::hours(1);
 
-struct StateDisconnected {}
+pub(crate) struct StateDisconnected {}
 
-struct StateConnected {
+pub(crate) struct StateConnected {
     token: String,
 }
 
-struct SMIQClient<S> {
+pub(crate) struct SMIQClient<S> {
     state: S,
 }
 
 impl SMIQClient<StateDisconnected> {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         SMIQClient::<StateDisconnected> {
             state: StateDisconnected {},
         }
     }
 
-    async fn authenticate(self) -> SMIQClient<StateConnected> {
+    pub(crate) async fn authenticate(self) -> SMIQClient<StateConnected> {
         let _token = get_auth_token().await.expect("Authentication failed");
         let state = StateConnected { token: _token };
         SMIQClient::<StateConnected> { state }
@@ -42,11 +42,12 @@ impl SMIQClient<StateDisconnected> {
 }
 
 impl SMIQClient<StateConnected> {
-    fn get_token(&self) -> &str {
+    pub(crate) fn get_token(&self) -> &str {
         &self.state.token
     }
 
-    fn api_configuration(self) -> Configuration {
+    /// The generated client's configuration, carrying our access token.
+    pub(crate) fn api_configuration(&self) -> Configuration {
         Configuration {
             base_path: BASE_URL.to_string(),
             oauth_access_token: Some(self.get_token().to_string()),
@@ -129,8 +130,8 @@ fn revision_icon(revision: &str) -> &'static str {
 
 /// A sensor prepared for display: everything the filters, the sort and the
 /// table need, parsed once.
-struct SensorRow {
-    uid: String,
+pub(crate) struct SensorRow {
+    pub(crate) uid: String,
     kind: SensorKind,
     revision: String,
     software_version: String,
@@ -229,31 +230,35 @@ fn sort_sensors(rows: &mut [SensorRow], sort: SensorSort, reverse: bool) {
     }
 }
 
-pub(crate) async fn print_sensors(
+/// Fetch the account's sensors and keep the ones the filters select.
+///
+/// Shared by `sensors`, which prints them, and `waveforms`, which downloads
+/// them, so both understand `--filter` the same way.
+pub(crate) async fn selected_sensors(
+    client: &SMIQClient<StateConnected>,
     filters: &[SensorFilter],
-    sort: SensorSort,
-    reverse: bool,
-) -> Result<(), Error<GetSensorsError>> {
-    let client = SMIQClient::new();
-    let connected_client = client.authenticate().await;
-    let response = get_sensors(
-        &connected_client.api_configuration(),
-        None,
-        Some(1000),
-        None,
-    )
-    .await?;
+) -> Result<Vec<SensorRow>, Error<GetSensorsError>> {
+    let response = get_sensors(&client.api_configuration(), None, Some(1000), None).await?;
     let sensors: Vec<Sensor> = response.sensors.into_values().collect();
     if sensors.len() == 1000 {
         warn!("hit sensor request limit");
     }
 
     let now = Local::now().naive_utc();
-    let mut rows: Vec<SensorRow> = sensors
+    Ok(sensors
         .iter()
         .filter_map(|sensor| SensorRow::from_sensor(sensor, now))
         .filter(|row| row.selected_by(filters))
-        .collect();
+        .collect())
+}
+
+pub(crate) async fn print_sensors(
+    filters: &[SensorFilter],
+    sort: SensorSort,
+    reverse: bool,
+) -> Result<(), Error<GetSensorsError>> {
+    let client = SMIQClient::new().authenticate().await;
+    let mut rows = selected_sensors(&client, filters).await?;
     sort_sensors(&mut rows, sort, reverse);
 
     present_sensors(&rows);
