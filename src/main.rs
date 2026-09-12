@@ -2,9 +2,12 @@ mod api;
 mod cli;
 mod mseed;
 mod output;
+mod samples;
 mod scan;
+mod seedlink;
 mod table;
 mod timespec;
+mod tui;
 mod waveforms;
 
 use crate::scan::scan;
@@ -64,11 +67,44 @@ async fn main() -> Result<()> {
             .await?;
         }
 
+        Commands::Tui {
+            sensor,
+            window,
+            port,
+            server,
+        } => {
+            watch(&sensor, window, port, server).await?;
+        }
+
         Commands::Action { action, sensor_uid } => {
             trigger_action(&action.to_string(), &sensor_uid).await?;
         }
     }
     Ok(())
+}
+
+/// How many records may queue up before the reader waits for the view. A
+/// sensor sends a handful a second, so this is seconds of slack, not samples.
+const UPDATE_QUEUE: usize = 256;
+
+/// Open the live view on one sensor.
+async fn watch(sensor: &str, window: f64, port: u16, server: String) -> Result<()> {
+    let source = seedlink::Source::from_arg(sensor)?;
+
+    // Logging goes to standard error, which is the same screen the view draws
+    // on, so it is silenced for as long as the view is up.
+    log::set_max_level(log::LevelFilter::Off);
+
+    let (sender, receiver) = tokio::sync::mpsc::channel(UPDATE_QUEUE);
+    let reader = tokio::spawn(seedlink::stream(source.clone(), server, port, sender));
+
+    let mut terminal = ratatui::init();
+    let outcome = tui::run(source, window, receiver, &mut terminal).await;
+    ratatui::restore();
+
+    reader.abort();
+    log::set_max_level(log::LevelFilter::Info);
+    outcome
 }
 
 struct Device {

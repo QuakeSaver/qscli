@@ -201,6 +201,11 @@ mod tests {
                 .and_hms_opt(13, 37, 5)
                 .unwrap(),
             length: 512,
+            samples: 100,
+            sample_rate: 100.0,
+            data_offset: 64,
+            encoding: Some(11),
+            data_big_endian: true,
         }
     }
 
