@@ -1,9 +1,9 @@
-//! Just enough miniSEED to file a record away.
+//! Just enough miniSEED to file a record away, or to read its samples.
 //!
-//! The download never looks at samples, so this reads only the fixed section of
-//! the data header: which stream the record belongs to, when it starts and how
-//! long it is. That is all the SDS layout needs, and it keeps us independent of
-//! a decoder for the many miniSEED encodings.
+//! This reads the fixed section of the data header and blockette 1000: which
+//! stream the record belongs to, when it starts, how long it is, and where and
+//! in what encoding its samples sit. The download needs only the first three,
+//! for the SDS layout; the live view hands the rest to [`crate::samples`].
 
 use chrono::{NaiveDate, NaiveDateTime};
 use eyre::{eyre, Result};
@@ -18,8 +18,8 @@ const FALLBACK_RECORD_LEN: usize = 512;
 /// Blockettes live in the header, so a chain reaching this far is malformed.
 const MAX_BLOCKETTE_SCAN: usize = 1024;
 
-/// Where a record belongs and when it starts.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Where a record belongs, when it starts, and how to read its samples.
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RecordHeader {
     pub(crate) network: String,
     pub(crate) station: String,
@@ -28,6 +28,17 @@ pub(crate) struct RecordHeader {
     pub(crate) start: NaiveDateTime,
     /// Total record length in bytes, header included.
     pub(crate) length: usize,
+    /// How many samples the record carries.
+    pub(crate) samples: usize,
+    /// Samples per second, worked out from the header's factor and multiplier.
+    pub(crate) sample_rate: f64,
+    /// Where the samples begin within the record.
+    pub(crate) data_offset: usize,
+    /// The encoding blockette 1000 names, absent when it carries no blockette.
+    pub(crate) encoding: Option<u8>,
+    /// The byte order of the samples, which blockette 1000 states separately
+    /// from the header's own.
+    pub(crate) data_big_endian: bool,
 }
 
 impl RecordHeader {
@@ -93,12 +104,40 @@ fn start_time(
         .ok_or_else(|| eyre!("record starts at an impossible time of day"))
 }
 
-/// Walk the blockette chain for blockette 1000, which states the record length
-/// as a power of two.
+/// What blockette 1000 says about a record: how long it is, how its samples are
+/// encoded, and in which byte order they were written.
+struct DataBlockette {
+    length: usize,
+    encoding: u8,
+    big_endian: bool,
+}
+
+/// Work out the sample rate from the factor and multiplier the header spells it
+/// with. Both are counts when positive and divisors when negative, which is how
+/// SEED writes rates below one sample per second.
+fn sample_rate(factor: i16, multiplier: i16) -> f64 {
+    let (factor, multiplier) = (factor as f64, multiplier as f64);
+    match (factor > 0.0, multiplier > 0.0) {
+        (true, true) => factor * multiplier,
+        (true, false) if multiplier != 0.0 => -factor / multiplier,
+        (false, true) if factor != 0.0 => -multiplier / factor,
+        (false, false) if factor != 0.0 && multiplier != 0.0 => 1.0 / (factor * multiplier),
+        // A zero in either field leaves the rate unstated, as it is for the
+        // log and opaque-data records that carry no samples.
+        _ => 0.0,
+    }
+}
+
+/// Walk the blockette chain for blockette 1000, the one every data record
+/// carries.
 ///
 /// Returns `None` while the chain runs past the bytes we have, so the caller can
-/// wait for more of the stream.
-fn record_length(buf: &[u8], first_blockette: usize, big_endian: bool) -> Option<Option<usize>> {
+/// wait for more of the stream; `Some(None)` when there is no such blockette.
+fn data_blockette(
+    buf: &[u8],
+    first_blockette: usize,
+    big_endian: bool,
+) -> Option<Option<DataBlockette>> {
     let read_u16 = |at: usize| {
         let raw = [buf[at], buf[at + 1]];
         if big_endian {
@@ -121,7 +160,12 @@ fn record_length(buf: &[u8], first_blockette: usize, big_endian: bool) -> Option
             if !(8..=20).contains(&exponent) {
                 return Some(None);
             }
-            return Some(Some(1usize << exponent));
+            return Some(Some(DataBlockette {
+                length: 1usize << exponent,
+                encoding: buf[offset + 4],
+                // The word order byte is 1 for big-endian, 0 for little.
+                big_endian: buf[offset + 5] != 0,
+            }));
         }
         let next = read_u16(offset + 2) as usize;
         // The chain must move forward, or we would spin on a malformed record.
@@ -172,21 +216,22 @@ pub(crate) fn parse_header(buf: &[u8]) -> Result<Option<RecordHeader>> {
         read_u16(28),
     )?;
 
-    let length = match record_length(buf, read_u16(46) as usize, big_endian) {
+    let blockette = match data_blockette(buf, read_u16(46) as usize, big_endian) {
         None => return Ok(None),
-        Some(Some(length)) => length,
-        Some(None) => {
-            warn!(
-                "record without a readable blockette 1000, assuming {} byte records",
-                FALLBACK_RECORD_LEN
-            );
-            FALLBACK_RECORD_LEN
-        }
+        Some(blockette) => blockette,
     };
+    if blockette.is_none() {
+        warn!(
+            "record without a readable blockette 1000, assuming {} byte records",
+            FALLBACK_RECORD_LEN
+        );
+    }
+    let length = blockette.as_ref().map_or(FALLBACK_RECORD_LEN, |b| b.length);
     if length < FIXED_HEADER_LEN {
         return Err(eyre!("record claims to be only {} bytes long", length));
     }
 
+    let read_i16 = |at: usize| read_u16(at) as i16;
     Ok(Some(RecordHeader {
         station: seed_code(&buf[8..13], "station")?,
         location: seed_code(&buf[13..15], "location")?,
@@ -194,6 +239,12 @@ pub(crate) fn parse_header(buf: &[u8]) -> Result<Option<RecordHeader>> {
         network: seed_code(&buf[18..20], "network")?,
         start,
         length,
+        samples: read_u16(30) as usize,
+        sample_rate: sample_rate(read_i16(32), read_i16(34)),
+        data_offset: read_u16(44) as usize,
+        encoding: blockette.as_ref().map(|b| b.encoding),
+        // Without a blockette the header's own order is the best guess.
+        data_big_endian: blockette.as_ref().map_or(big_endian, |b| b.big_endian),
     }))
 }
 
@@ -291,11 +342,16 @@ pub(crate) mod tests {
         r[25] = 37; // minute
         r[26] = 5; // second
         r[28..30].copy_from_slice(&1234u16.to_be_bytes()); // 0.1234 s
+        r[30..32].copy_from_slice(&100u16.to_be_bytes()); // sample count
+        r[32..34].copy_from_slice(&100i16.to_be_bytes()); // rate factor
+        r[34..36].copy_from_slice(&1i16.to_be_bytes()); // rate multiplier
         r[39] = 1; // one blockette follows
         r[44..46].copy_from_slice(&64u16.to_be_bytes()); // start of data
         r[46..48].copy_from_slice(&48u16.to_be_bytes()); // first blockette
         r[48..50].copy_from_slice(&1000u16.to_be_bytes()); // blockette type
         r[50..52].copy_from_slice(&0u16.to_be_bytes()); // no next blockette
+        r[52] = 11; // Steim2, the encoding the sensors pack counts with
+        r[53] = 1; // big-endian samples
         r[54] = 9; // 2^9 = 512 byte records
         r
     }
@@ -315,6 +371,11 @@ pub(crate) mod tests {
                 .and_hms_nano_opt(13, 37, 5, 123_400_000)
                 .unwrap()
         );
+        assert_eq!(header.samples, 100);
+        assert_eq!(header.sample_rate, 100.0);
+        assert_eq!(header.data_offset, 64);
+        assert_eq!(header.encoding, Some(11));
+        assert!(header.data_big_endian);
     }
 
     #[test]
@@ -324,6 +385,18 @@ pub(crate) mod tests {
             .expect("header");
         assert_eq!(header.location, "");
         assert_eq!(header.stream_id(), "GE.APE..BHZ");
+    }
+
+    #[test]
+    fn a_rate_below_one_per_second_is_read_from_the_divisors() {
+        // SEED writes 100 Hz as a plain factor, and one sample every ten
+        // seconds as a divisor, which is the case worth pinning down.
+        assert_eq!(sample_rate(100, 1), 100.0);
+        assert_eq!(sample_rate(-10, 1), 0.1);
+        assert_eq!(sample_rate(20, -2), 10.0);
+        assert_eq!(sample_rate(-2, -5), 0.1);
+        // A record carrying no samples states no rate.
+        assert_eq!(sample_rate(0, 0), 0.0);
     }
 
     #[test]

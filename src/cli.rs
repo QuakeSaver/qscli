@@ -1,3 +1,5 @@
+use crate::seedlink::DEFAULT_PORT;
+use crate::tui::DEFAULT_WINDOW;
 use clap::{Parser, Subcommand, ValueEnum};
 use std::fmt::Display;
 /// Scan for QuakeSaver devices
@@ -69,6 +71,25 @@ pub enum Commands {
         /// Split the download into requests of at most this length
         #[arg(long)]
         chunk: Option<String>,
+    },
+    /// Watch a sensor's waveforms live in the terminal
+    ///
+    /// Streams over SeedLink, either from the network server or, when given an
+    /// address, straight from a sensor on your own network.
+    Tui {
+        /// The sensor to watch: a UID (`A3B7K9Q2`), streamed from the network
+        /// server, or the address of a sensor on your LAN (`192.168.178.55`),
+        /// streamed from the sensor itself
+        sensor: String,
+        /// Seconds of signal to keep on screen
+        #[arg(short, long, default_value_t = DEFAULT_WINDOW)]
+        window: f64,
+        /// The SeedLink port to connect to
+        #[arg(short, long, default_value_t = DEFAULT_PORT)]
+        port: u16,
+        /// The network SeedLink server to use for sensors named by UID
+        #[arg(long, default_value = "seedlink.network.quakesaver.net")]
+        server: String,
     },
     /// Send an action
     Action {

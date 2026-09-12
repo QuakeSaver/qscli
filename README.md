@@ -54,7 +54,8 @@ export SEISMIQ_PASSWORD="your password"
 ```
 
 The `detect` command talks directly to devices on your LAN and needs no
-authentication.
+authentication, and neither does `tui`: SeedLink recognises you by the address
+you connect from (see [`tui`](#tui-sensor)).
 
 Get a list of available commands:
 
@@ -216,6 +217,72 @@ Once written, an archive can be read by any SDS-aware tool, e.g. SeisComP's
 - `--longest-only` — keep only the longest segment per stream.
 
 [SDS]: https://www.seiscomp.de/doc/base/glossary.html#term-SDS
+
+### `tui <sensor>`
+
+Watch a sensor's waveforms live in the terminal, one stacked panel per channel.
+Data arrives over [SeedLink], which pushes records as they are recorded, so this
+is the live counterpart to `waveforms` — that fetches a window that has already
+passed, this follows one as it happens.
+
+```shell
+sqcli tui A3B7K9Q2
+```
+
+```text
+A3B7K9Q2 (network)  live  A3B7K9Q2  SeedLink v3.0 [QuakeSaver v1.0.0]  ·  201 packets  ·  0.5s behind
+┌ HHZ  100 Hz  ±41.8k ─────────────────────────────────────────────────────┐
+│                     ⢠⡀                                                   │
+│    ⢰⣼⡀⣾⡀⣾ ⣾ ⡇⢸⡆⢸⡆⣸⡆⣸⣆⣧⢠⣧⢸⣿⢰⡇⢰⡇⣾ ⣿ ⣷ ⣷ ⣷⢀⡇⣸⡆⣸⡄⣼⡄⣼⡀⣾⡀⣾ ⣾ ⣷ ⣷ ⢰⡇⣸⡆⣼⡄⣾⡀│
+│    ⢸⡇⢿⠁⢿⠁⢿ ⢿⢸⡇⢸⠇⢹⠇⢹⠘⡟⠘⡟⢸⣼⠸⡇⠸⡇⢸ ⢿ ⣿ ⡿ ⡿⢹⠇⢹⠃⢻⠃⢿⠁⢿⠁⢿ ⢿ ⡿ ⡿ ⢹⠇⢻⠃⢿⠁⢿│
+│                      ⠃                                                   │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Which sensor, and where from
+
+The argument is either a **sensor UID** or the **address of a sensor on your
+network**, and that choice picks the server:
+
+```shell
+sqcli tui A3B7K9Q2          # through the network SeedLink server
+sqcli tui 192.168.178.55    # straight from the sensor on your LAN
+sqcli tui qssensor.local    # the same, by name
+```
+
+Sensor UIDs are letters and digits, so anything containing a dot or a colon is
+read as an address. `sqcli detect` prints the addresses to use, and an address
+may carry its own port (`192.168.178.55:18010`).
+
+Neither route takes a password, but each has a precondition:
+
+- **By UID**, the network server decides what to hand out from the address you
+  connect from. Register your public IP under *Waveforms > Network SeedLink
+  Server* in the web interface, or `sqcli` will report that the server serves it
+  no sensors.
+- **By address**, the sensor serves anyone who can reach it, but only once its
+  own server is running — start it under *Waveform access > SeedLink Server*.
+
+#### Keys
+
+| Key | Effect |
+| --- | --- |
+| `q`, `Esc` | close the view |
+| `↑` `↓` | move the highlight between channels |
+| `⏎` | give the highlighted channel the whole window, or hand it back |
+| `+` `-` | show more or less time (5 s to 10 min) |
+| `a` | scale every channel alike, for comparing components, or each to itself |
+
+Each panel is labelled with its channel, its sample rate and the amplitude it is
+scaled to, and each column of a panel keeps the highest and lowest sample that
+falls in it, so a spike between two columns is drawn rather than skipped. The
+time axis runs backwards from the newest sample that has arrived, and the header
+counts how far behind the wall clock that is.
+
+The connection re-dials itself if it drops, so leaving the view open through a
+sensor reboot or a flaky link is fine.
+
+[SeedLink]: https://docs.seismiq.net/features/seedlink.html
 
 ### `action <action> <sensor-uid>`
 
